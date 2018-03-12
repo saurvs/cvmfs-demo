@@ -1,0 +1,129 @@
+<!doctype html>
+<html>
+<head>
+    <title>CVMFS Demo</title>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="css/xterm.css" />
+    <script src="js/xterm.js"></script>
+    <script src="js/sql.js"></script>
+    <script src="js/pako.min.js"></script>
+    <script src="js/md5.min.js"></script>
+    <script async type="text/javascript" src="index.js"></script>
+</head>
+<body>
+    <div id="terminal"></div>
+    <script>
+        window.onload = function() {
+            var term = new Terminal();
+            term.open(document.getElementById("terminal"));
+
+            term.writeln("Welcome to a simple terminal emulator that lets you explore the");
+            term.writeln("CernVM-FS repository at http://hepvm.cern.ch/cvmfs/cernvm-devel.cern.ch\n");
+
+            term.writeln("Since this page is served through HTTPS, most browsers will block all HTTP");
+            term.writeln("requests from it. To use this terminal emulator on Firefox, go to about:config");
+            term.writeln("and set security.mixed_content.block_active_content to false.\n");
+
+            term.writeln("Type 'help' to see available commands and more info.\n");
+
+            var keys = [];
+
+            const PS1 = " $ ";
+            var prompt = FS.cwd() + PS1;
+            term.write(prompt);
+
+            term.on('key', function(key, e) {
+                if (e.key == "Enter") {
+                    var cmd = keys
+                        .join("").trim()
+                        .replace(/\s\s+/g, ' ').split(" ");
+                    keys = [];
+
+                    term.writeln("");
+                    switch(cmd[0]) {
+                        case "ls": {
+                            const dir = cmd[1] === undefined ? "." : cmd[1];
+
+                            var entries;
+                            try {
+                                entries = FS.readdir(dir);
+                            } catch (err) {
+                                term.writeln(err);
+                                break;
+                            }
+                            
+                            for (const entry of entries) {
+                                term.write(entry + " ");
+                            }
+
+                            term.writeln("");
+                        } break;
+                        case "cat":
+                            if (cmd[1] !== undefined) {
+                                const file = cmd[1];
+
+                                const buffer = new Uint8Array(2000);
+                                try {
+                                    const stream = FS.open(file);
+                                    FS.read(stream, buffer, 0, 2000, 0);
+                                } catch (err) {
+                                    term.writeln(err);
+                                    break;
+                                }
+
+                                const decoder = new TextDecoder();
+                                const text = decoder.decode(buffer);
+                                const lines = text.split("\n");
+
+                                for (const line of lines) {
+                                    term.write(line);
+                                    if (lines[lines.length - 1] !== line) {
+                                        term.writeln("");
+                                    }
+                                }
+                            } else {
+                                term.writeln("Usage: cat FILE");
+                            }
+                        break;
+                        case "cd": {
+                            const dir = cmd[1] === undefined ? "/" : cmd[1];
+                            try {
+                                FS.chdir(dir);
+                            } catch (err) {
+                                term.writeln(err);
+                                break;
+                            }
+                            prompt = FS.cwd() + PS1;
+                        } break;
+                        case "help":
+                            term.writeln("\nAvailable commands:\n");
+                            term.writeln("$ cat FILE");
+                            term.writeln("$ cd [DIR]");
+                            term.writeln("$ ls [DIR]\n");
+                            term.writeln("Accessing anything under /cvmfs will mount the repository. And, since");
+                            term.writeln("this page makes synchronous HTTP requests, it's normal for the UI to");
+                            term.writeln("freeze while downloading data.\n")
+                            term.writeln("Also, accessing symbolic links, nested catalogs and chunked files");
+                            term.writeln("isn't supported, and they won't be shown in directory listings.\n");
+                        break;
+                        default:
+                            if (cmd[0].length > 0) {
+                                term.writeln("Invalid command. Type 'help' to see available commands.");
+                            }
+                        break;
+                    }
+                    term.write(prompt);
+                } else if (e.key == "Backspace") {
+                    if (keys.length > 0) {
+                        keys.pop();
+                        term.write('\b \b');
+                    }
+                } else {
+                    term.write(key);
+                    keys.push(key);
+                }
+            });
+        };
+    </script>
+</body>
+</html>
